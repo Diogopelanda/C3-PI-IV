@@ -1,3 +1,12 @@
+#Execução::
+#Abrir CMD > uvicorn main:app --reload
+#Abrir CMD > python -m http.server 8001
+
+#Abrir navegador > http://127.0.0.1:8001/index.html
+
+
+#-------------------------------------------------#
+
 # SIMTRA – Sistema Inteligente de Mobilidade e Tráfego Rodoviário  
 ### Projeto Integrador IV – Aplicações de Inteligência Artificial
 
@@ -20,3 +29,4 @@ O projeto permite analisar, prever e classificar o tráfego rodoviário brasilei
 - K-Means Clustering
 
 ##  Estrutura
+
