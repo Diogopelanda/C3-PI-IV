@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>SIMTRA - Analisador Inteligente de Tráfego Rodoviário</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <style>
+    body {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: Arial, sans-serif;
+      margin: 0;
+    }
+    header {
+      padding: 20px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      text-align: center;
+    }
+    h1 {
+      margin: 0;
+      color: #38bdf8;
+      font-size: 22px;
+    }
+    main {
+      padding: 20px;
+      max-width: 1100px;
+      margin: auto;
+    }
+    .card {
+      background: #1e293b;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+      font-size: 14px;
+      color: #cbd5e1;
+    }
+    select, input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 6px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #e2e8f0;
+    }
+    button {
+      margin-top: 14px;
+      padding: 10px 16px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background: #38bdf8;
+      color: #0f172a;
+      font-weight: bold;
+    }
+    button.secondary {
+      background: transparent;
+      border: 1px solid #64748b;
+      color: #e2e8f0;
+      margin-left: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+    th, td {
+      border: 1px solid #334155;
+      padding: 8px;
+      font-size: 13px;
+    }
+    th {
+      background: #0f172a;
+    }
+    .pill {
+      background: #38bdf8;
+      color: #0f172a;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: bold;
+    }
+    .result-box {
+      margin-top: 10px;
+      padding: 10px;
+      background: #0f172a;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      font-size: 14px;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>SIMTRA - Analisador Inteligente de Tráfego Rodoviário</h1>
+  </header>
+
+  <main>
+
+    <div class="card">
+      <h2>Filtros e Consulta de Trechos</h2>
+
+      <label for="ufSelect">Selecione a UF:</label>
+      <select id="ufSelect"></select>
+
+      <label for="brSelect">Selecione a BR:</label>
+      <select id="brSelect">
+        <option>Selecione uma UF primeiro</option>
+      </select>
+
+      <label for="limitInput">Quantidade de trechos:</label>
+      <input type="number" id="limitInput" value="100" min="10" max="500">
+
+      <button onclick="carregarTrechos()">Carregar Trechos</button>
+    </div>
+
+    <div class="card">
+      <h2>Estatísticas da UF</h2>
+      <p><strong>VMDa médio:</strong> <span id="vmda_medio">-</span></p>
+      <p><strong>VMDa mínimo:</strong> <span id="vmda_min">-</span></p>
+      <p><strong>VMDa máximo:</strong> <span id="vmda_max">-</span></p>
+      <p><strong>Total de trechos:</strong> <span id="qtd_trechos">-</span></p>
+    </div>
+
+    <div class="card">
+      <h2>Inteligência Artificial – Previsão e Classificação</h2>
+
+      <p>Use os campos abaixo para testar os modelos de IA treinados com o dataset do DNIT.</p>
+
+      <label for="iaUf">UF:</label>
+      <select id="iaUf"></select>
+
+      <label for="iaBr">BR:</label>
+      <input type="number" id="iaBr" placeholder="Ex: 101">
+
+      <label for="iaExt">Extensão do trecho (km):</label>
+      <input type="number" id="iaExt" placeholder="Ex: 10.5" step="0.1">
+
+      <button onclick="preverVMDA()">Prever VMDa (Regressão Linear)</button>
+      <button class="secondary" onclick="classificarFaixa()">Classificar Faixa de Tráfego (Árvore de Decisão)</button>
+
+      <div id="iaResultado" class="result-box">
+        Preencha os campos e clique em um dos botões para ver o resultado da IA.
+      </div>
+
+      <button style="margin-top:16px;" onclick="resumoClusters()">Resumo dos Clusters (K-Means)</button>
+
+      <div id="clusterResultado" class="result-box">
+        Clique em "Resumo dos Clusters" para ver agrupamentos de trechos por padrão de tráfego.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Trechos Encontrados</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>UF</th>
+            <th>BR</th>
+            <th>Km início</th>
+            <th>Km fim</th>
+            <th>Extensão</th>
+            <th>VMDa C</th>
+            <th>VMDa D</th>
+            <th>VMDa Total</th>
+          </tr>
+        </thead>
+        <tbody id="trechosTabela"></tbody>
+      </table>
+    </div>
+
+  </main>
+
+  <script>
+    const API = "http://127.0.0.1:8000";
+
+    async function carregarUFs() {
+      try {
+        const res = await fetch(`${API}/ufs`);
+        if (!res.ok) throw new Error("Erro /ufs " + res.status);
+        const data = await res.json();
+        const listaUFs = data.ufs || data;
+
+        const ufSelect = document.getElementById("ufSelect");
+        const iaUf = document.getElementById("iaUf");
+
+        ufSelect.innerHTML = "<option value=''>Selecione</option>";
+        iaUf.innerHTML = "<option value=''>Selecione</option>";
+
+        listaUFs.forEach(uf => {
+          ufSelect.innerHTML += `<option value="${uf}">${uf}</option>`;
+          iaUf.innerHTML += `<option value="${uf}">${uf}</option>`;
+        });
+      } catch (e) {
+        alert("Erro ao buscar a lista de UFs. Veja o console (F12).");
+        console.error(e);
+      }
+    }
+
+    document.getElementById("ufSelect").addEventListener("change", async function () {
+      const uf = this.value;
+      const brSelect = document.getElementById("brSelect");
+
+      if (!uf) {
+        brSelect.innerHTML = "<option value=''>Selecione uma UF primeiro</option>";
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/rodovias?uf=${uf}`);
+        if (!res.ok) throw new Error("Erro /rodovias " + res.status);
+        const data = await res.json();
+        const listaBRs = data.rodovias || data;
+
+        brSelect.innerHTML = "<option value=''>Todas</option>";
+        listaBRs.forEach(br => {
+          brSelect.innerHTML += `<option value="${br}">BR-${br}</option>`;
+        });
+
+        carregarEstatisticasUF(uf);
+      } catch (e) {
+        alert("Erro ao carregar BRs. Veja o console (F12).");
+        console.error(e);
+      }
+    });
+
+    async function carregarEstatisticasUF(uf) {
+      try {
+        const res = await fetch(`${API}/estatisticas/uf/${uf}`);
+        if (!res.ok) throw new Error("Erro /estatisticas " + res.status);
+        const data = await res.json();
+
+        document.getElementById("vmda_medio").innerText = Math.round(data.vmda_medio);
+        document.getElementById("vmda_min").innerText = data.vmda_min;
+        document.getElementById("vmda_max").innerText = data.vmda_max;
+        document.getElementById("qtd_trechos").innerText = data.qtd_trechos;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function carregarTrechos() {
+      const uf = document.getElementById("ufSelect").value;
+      const br = document.getElementById("brSelect").value;
+      const limite = document.getElementById("limitInput").value || 100;
+
+      if (!uf) {
+        alert("Selecione uma UF primeiro.");
+        return;
+      }
+
+      let url = `${API}/trechos?uf=${uf}&limite=${limite}`;
+      if (br) url += `&br=${br}`;
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Erro /trechos " + res.status);
+        const data = await res.json();
+
+        const tabela = document.getElementById("trechosTabela");
+        tabela.innerHTML = "";
+
+        data.forEach(t => {
+          tabela.innerHTML += `
+            <tr>
+              <td>${t.id}</td>
+              <td>${t.sg_uf}</td>
+              <td>${t.vl_br}</td>
+              <td>${t.vl_km_inic}</td>
+              <td>${t.vl_km_fina}</td>
+              <td>${t.vl_extensa}</td>
+              <td>${t.VMDa_C}</td>
+              <td>${t.VMDa_D}</td>
+              <td><span class="pill">${Math.round(t.VMDA_TOTAL)}</span></td>
+            </tr>
+          `;
+        });
+      } catch (e) {
+        alert("Erro ao carregar trechos. Veja o console (F12).");
+        console.error(e);
+      }
+    }
+
+    async function preverVMDA() {
+      const uf = document.getElementById("iaUf").value;
+      const br = document.getElementById("iaBr").value;
+      const ext = document.getElementById("iaExt").value;
+      const box = document.getElementById("iaResultado");
+
+      if (!uf || !br || !ext) {
+        box.innerText = "Preencha UF, BR e extensão antes de prever.";
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/predicao/vmda`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ sg_uf: uf, vl_br: parseInt(br), vl_extensa: parseFloat(ext) })
+        });
+        if (!res.ok) throw new Error("Erro /predicao " + res.status);
+        const data = await res.json();
+
+        box.innerText =
+          "Previsão de VMDa (Regressão Linear)\n\n" +
+          `UF: ${data.sg_uf}\n` +
+          `BR: ${data.vl_br}\n` +
+          `Extensão: ${data.vl_extensa} km\n\n` +
+          `🧠 VMDa previsto: ${Math.round(data.vmda_previsto)} veículos/dia\n` +
+          `MSE (teste): ${data.mse_teste.toFixed(2)}\n` +
+          `R² (teste): ${data.r2_teste.toFixed(4)}`;
+      } catch (e) {
+        box.innerText = "Erro ao chamar a API de previsão.";
+        console.error(e);
+      }
+    }
+
+    async function classificarFaixa() {
+      const uf = document.getElementById("iaUf").value;
+      const br = document.getElementById("iaBr").value;
+      const ext = document.getElementById("iaExt").value;
+      const box = document.getElementById("iaResultado");
+
+      if (!uf || !br || !ext) {
+        box.innerText = "Preencha UF, BR e extensão antes de classificar.";
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/classificacao/faixa_vmda`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ sg_uf: uf, vl_br: parseInt(br), vl_extensa: parseFloat(ext) })
+        });
+        if (!res.ok) throw new Error("Erro /classificacao " + res.status);
+        const data = await res.json();
+
+        box.innerText =
+          "Classificação de Faixa de Tráfego (Árvore de Decisão)\n\n" +
+          `UF: ${data.sg_uf}\n` +
+          `BR: ${data.vl_br}\n` +
+          `Extensão: ${data.vl_extensa} km\n\n` +
+          `🧠 Faixa prevista: ${data.faixa_prevista}\n` +
+          `Acurácia do modelo: ${data.acuracia_teste.toFixed(4)}`;
+      } catch (e) {
+        box.innerText = "Erro ao chamar a API de classificação.";
+        console.error(e);
+      }
+    }
+
+    async function resumoClusters() {
+      const box = document.getElementById("clusterResultado");
+      box.innerText = "Carregando resumo dos clusters...";
+
+      try {
+        const res = await fetch(`${API}/clusters/resumo`, { method: "POST" });
+        if (!res.ok) throw new Error("Erro /clusters " + res.status);
+        const data = await res.json();
+
+        let texto = `Modelo K-Means com ${data.n_clusters} clusters.\n\nTrechos por cluster:\n`;
+        for (const [cluster, qtd] of Object.entries(data.qtd_por_cluster)) {
+          texto += `• Cluster ${cluster}: ${qtd} trechos\n`;
+        }
+        texto += "\nCentroides:\n";
+        data.centroides.forEach(c => {
+          texto += `• Cluster ${c.cluster}: VMDA ≈ ${Math.round(c.VMDA_TOTAL_medio)}, Extensão ≈ ${c.vl_extensa_media.toFixed(1)} km\n`;
+        });
+
+        box.innerText = texto;
+      } catch (e) {
+        box.innerText = "Erro ao carregar clusters.";
+        console.error(e);
+      }
+    }
+
+    carregarUFs();
+  </script>
+</body>
+</html>
